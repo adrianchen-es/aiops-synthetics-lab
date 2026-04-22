@@ -1,0 +1,11 @@
+host,criticality,assertionText,assertionSelector
+expired.badssl.com,critical
+no-sct.badssl.com,medium
+wrong.host.badssl.com,high
+untrusted-root.badssl.com,high
+pinning-test.badssl.com,medium
+hsts.badssl.com,low
+upgrade.badssl.com,low
+https-everywhere.badssl.com,low
+elastic.co
+cloud.elastic.co,low

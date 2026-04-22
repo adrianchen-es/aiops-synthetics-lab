@@ -1,0 +1,123 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Elastic Synthetics project – .gitignore
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Node / npm ────────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+yarn.lock
+pnpm-lock.yaml
+.npmrc
+.yarnrc
+.yarnrc.yml
+
+# ── TypeScript build output ───────────────────────────────────────────────────
+*.js
+*.js.map
+*.d.ts
+.synthetics/
+dist/
+build/
+out/
+
+# ── Elastic Synthetics artefacts ─────────────────────────────────────────────
+.synthetics/
+synthetic-results.json
+
+# ── Environment / secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OS-level files – macOS
+# ─────────────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+.AppleDB
+.AppleDesktop
+.apdisk
+Icon
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OS-level files – Windows
+# ─────────────────────────────────────────────────────────────────────────────
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+[Dd]esktop.ini
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OS-level files – Linux
+# ─────────────────────────────────────────────────────────────────────────────
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Editors & IDEs
+# ─────────────────────────────────────────────────────────────────────────────
+# VS Code
+.vscode/
+!.vscode/extensions.json
+
+# JetBrains (IntelliJ, WebStorm, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Vim / Neovim
+*.swp
+*.swo
+*~
+Session.vim
+.netrwhist
+
+# Emacs
+\#*\#
+.\#*
+*.elc
+auto-save-list
+tramp
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Miscellaneous
+# ─────────────────────────────────────────────────────────────────────────────
+*.log
+*.pid
+*.seed
+*.pid.lock
+.cache/
+coverage/
+.nyc_output/

@@ -1,0 +1,33 @@
+{
+  "name": "ac-synthetics-demo-apr26",
+  "version": "1.0.0",
+  "description": "Elastic Synthetics project to extract and validate TLS server certificate fingerprints (SHA-256 primary, SHA-1 optional) across multiple real-world scenarios",
+  "private": true,
+  "scripts": {
+    "test": "npm run generate:tls-targets && elastic-synthetics journeys/",
+    "test:tls": "npm run generate:tls-targets && elastic-synthetics journeys/tls journeys/tls-browser",
+    "test:demos": "npm run generate:tls-targets && elastic-synthetics journeys/demos",
+    "test:kibana": "npm run generate:tls-targets && elastic-synthetics journeys/kibana",
+    "generate:tls-targets": "node --import tsx scripts/generate-tls-targets.ts",
+    "test:dry": "npm run generate:tls-targets && elastic-synthetics journeys/ --dry-run",
+    "test:unit": "node --import tsx --test tests/*.test.ts",
+    "check:journey-names": "node --import tsx scripts/check-journey-names-ascii.ts",
+    "test:ci": "npm run test:dry && npm run check:journey-names && npm run test:unit",
+    "push": "npm run generate:tls-targets && node --import tsx scripts/push-journeys.ts all",
+    "push:tls": "npm run generate:tls-targets && node --import tsx scripts/push-journeys.ts tls",
+    "push:demos": "npm run generate:tls-targets && node --import tsx scripts/push-journeys.ts demos",
+    "push:kibana": "npm run generate:tls-targets && node --import tsx scripts/push-journeys.ts kibana",
+    "push:staging": "npm run generate:tls-targets && elastic-synthetics push --config synthetics.config.ts --space staging -y"
+  },
+  "dependencies": {
+    "@elastic/synthetics": "^1.23.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.4.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
