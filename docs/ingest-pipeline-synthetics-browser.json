@@ -1,0 +1,74 @@
+{
+  "processors": [
+    {
+      "dissect": {
+        "if": "ctx.synthetics?.type != null && ctx.synthetics?.type == 'stdout' && ctx.synthetics?.payload?.message != null && ctx.synthetics?.payload?.message.startsWith('TLS_CERT') && ctx.synthetics?.payload?.message.contains('TLS_HASH')",
+        "field": "synthetics.payload.message",
+        "pattern": "TLS_CERT,%{_tmp.x509},TLS_HASH,%{_tmp.hashes}"
+      }
+    },
+    {
+      "json": {
+        "if": "ctx._tmp?.x509 != null",
+        "field": "_tmp.x509",
+        "target_field": "tls.server"
+      }
+    },
+    {
+      "remove": {
+        "if": "ctx._tmp?.x509 != null && ctx.tls?.server?.x509 != null",
+        "field": "_tmp.x509"
+      }
+    },
+    {
+      "json": {
+        "if": "ctx._tmp?.hashes != null",
+        "field": "_tmp.hashes",
+        "target_field": "_tmp.hash"
+      }
+    },
+    {
+      "rename": {
+        "if": "ctx._tmp?.hash?.hash != null",
+        "field": "_tmp.hash.hash",
+        "target_field": "tls.server.hash"
+      }
+    },
+    {
+      "gsub": {
+        "if": "ctx.tls?.server?.hash?.sha256 != null",
+        "field": "tls.server.hash.sha256",
+        "pattern": ":",
+        "replacement": ""
+      }
+    },
+    {
+      "gsub": {
+        "if": "ctx.tls?.server?.hash?.sha1 != null",
+        "field": "tls.server.hash.sha1",
+        "pattern": ":",
+        "replacement": ""
+      }
+    },
+    {
+      "set": {
+        "if": "ctx.tls?.server?.hash?.sha256 != null && ctx.tls?.server?.x509 != null",
+        "field": "summary.final_attempt",
+        "value": "true"
+      }
+    },
+    {
+      "convert": {
+        "if": "ctx.summary?.final_attempt != null",
+        "field": "summary.final_attempt",
+        "type": "boolean"
+      }
+    },
+    {
+      "remove": {
+        "if": "ctx._tmp != null",
+        "field": "_tmp"
+      }
+    }
+  ]
+}
