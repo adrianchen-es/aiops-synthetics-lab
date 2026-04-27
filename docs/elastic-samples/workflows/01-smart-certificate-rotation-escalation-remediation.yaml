@@ -85,7 +85,7 @@ steps:
           # routing logic
           - name: notification_routing_logic
             type: if
-            condition: "${{ steps.pagerduty_criticality_mapping.output == 'low' AND steps.business_hours_check.output == false }}"
+            condition: "${{ steps.severity_mapping.output == 'low' AND steps.business_hours_check.output == false }}"
             steps:
               - name: soft_notification
                 type: email
