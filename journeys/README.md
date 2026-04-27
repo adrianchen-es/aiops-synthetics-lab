@@ -1,5 +1,7 @@
 # Journey folders
 
+This layout matches the **aiops-synthetics-lab** companion to *Automated Certificate Monitoring and Self-Healing*: **browser** TLS + optional DOM checks live under **`tls-browser/`** (the article’s primary **Sense** path into `synthetics-*`), with **`tls/`** for TLS-only or route-stubbed checks.
+
 Journeys are grouped by folder so you can **run** or **push** a subset without touching the rest.
 
 ## TLS CSV per folder

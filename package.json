@@ -1,7 +1,7 @@
 {
-  "name": "ac-synthetics-demo-apr26",
+  "name": "aiops-synthetics-lab",
   "version": "1.0.0",
-  "description": "Elastic Synthetics project to extract and validate TLS server certificate fingerprints (SHA-256 primary, SHA-1 optional) across multiple real-world scenarios",
+  "description": "Companion Synthetics project for certificate monitoring: TLS journeys, ingest pipeline, ES|QL samples, and Elastic Workflows (Automated Certificate Monitoring and Self-Healing)",
   "private": true,
   "scripts": {
     "test": "npm run generate:tls-targets && elastic-synthetics journeys/",

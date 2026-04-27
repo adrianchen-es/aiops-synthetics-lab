@@ -1,0 +1,129 @@
+version: "1"
+name: Smart Certificate Rotation Escalation and Remediation
+enabled: true
+description: Conditional Escalation and Remediation
+consts:
+  ansible_webhook: "https://tower.internal.net/api/v2/job_templates/42/launch/"
+  ansible_token: "my_super_secret"
+triggers:
+  - type: alert
+
+steps:
+  - name: severity_mapping
+    type: console
+    with:
+      message: '{{ event.alerts[0]["kibana.alert.severity"] | default: "medium" }}'
+
+  # Check for start day
+  - name: business_hours_check
+    type: console
+    with:
+      message: |-
+        {%- assign hour = "now" | date: "%H", "Australia/Sydney" | plus: 0 %}
+        {%- if hour >= 8 and hour < 17 %}true{%- else %}false{%- endif %}
+
+  - name: find_affected_hosts
+    type: elasticsearch.esql.query
+    with:
+      query: FROM logs-osquery_manager.result-*
+       | WHERE tls.server.x509.subject.common_name is not null AND tls.server.x509.subject.common_name == "{{ event.alerts[0]['tls.server.x509.subject.common_name'][0] }}" AND `file.path` != "LocalMachine\\Certificate Enrollment Requests"
+       | EVAL days_until_expiry=DATE_DIFF("days", tls.server.x509.not_before, tls.server.x509.not_after)
+       | KEEP host.hostname, tls.server.x509.subject.common_name, tls.server.x509.not_before, tls.server.x509.not_after, file.path, days_until_expiry
+      format: json
+  # Host Identification Check
+  - name: check_host_identification
+    type: if
+    condition: "${{ steps.find_affected_hosts.output.values[0][0] IS NOT NULL and steps.find_affected_hosts.output.values[0][0] !='' }}"
+    steps:
+      - name: notification_no_host
+        type: email
+        connector-id: elastic-cloud-email
+        with:
+          to: [ "adrian.chen+lab2026@elastic.co" ]
+          subject: 'Certificate Remediation on {{ steps.find_affected_hosts.output.values[0][0] }} Failed'
+          message: >-
+            ALERT: {{ event.alerts[0]['tls.server.x509.subject.common_name'][0] }} is expiring but no hosts fou d with the certificate. Manual intervention required.
+  # Remediation
+  - name: remediate_or_notify
+    type: if
+    condition: "${{ steps.find_affected_hosts.output.values[0][5] <7 }}"
+    steps:
+      - name: check_host_freshness
+        type: elasticsearch.esql.query
+        with:
+          query: |
+            FROM metrics-system.cpu-*
+            | WHERE host.name == "{{steps.find_affected_hosts.output.values[0][0]}}"
+            | STATS latest_metric = MAX(@timestamp)
+            | EVAL latency_sec = (TO_LONG(NOW()) - TO_LONG(latest_metric)) / 1000
+            | LIMIT 1
+      - name: remediation_routing_logic
+        type: if
+        condition: 'steps.check_host_freshness.output.values[1] <= 300'
+        steps:
+          - name: trigger_ansible_rotation
+            type: http
+            with:
+              url: "{{consts.ansible_webhook}}"
+              method: POST
+              body:
+                extra_vars:
+                  target_host: "{{ steps.find_affected_hosts.output.values[0][0] }}"
+                  cert_name: "{{event.alerts[0].osquery.common_name}}"
+              headers:
+                Accept: application/json
+                Content-Type: application/json
+                Authorization: "Bearer {{consts.ansible_token}}"
+          - name: notify_success
+            type: slack
+            connector-id: "slack-sre-channel-uuid"
+            with:
+              message: >-
+                Cert rotation triggered for {{steps.find_affected_hosts.output.values[0][0]}}.
+                {{event.alerts[0].osquery.common_name}} — {{event.alerts[0].days_until_expiry}} days remaining.
+        else:
+          # routing logic
+          - name: notification_routing_logic
+            type: if
+            condition: "${{ steps.pagerduty_criticality_mapping.output == 'low' AND steps.business_hours_check.output == false }}"
+            steps:
+              - name: soft_notification
+                type: email
+                connector-id: elastic-cloud-email
+                with:
+                  to: [ "adrian.chen+lab2026@elastic.co" ]
+                  subject: 'Certificate Remediation on {{ steps.find_affected_hosts.output.values[0][0] }} Failed'
+                  message: >-
+                    ALERT: {{ steps.find_affected_hosts.output.values[0][0] }} has an expiring cert but hasn't reported
+                    metrics in over 5 minutes. Automation aborted. Manual intervention required.
+            else:
+              - name: pagerduty_criticality_mapping
+                type: console
+                with:
+                  message: |-
+                    {%- assign sev = steps.severity_mapping.output -%}
+                    {% case sev %}
+                      {% when "critical" %}critical{% when "medium" %}warning{% when "high" %}error{% else %}info{% endcase %}
+              - name: hard_notification
+                type: pagerduty
+                connector-id: "# Enter connector UUID here"
+                with:
+                  eventAction: "trigger"
+                  severity: '{{ steps.pagerduty_criticality_mapping.output }}'
+                  summary: >-
+                    ALERT: {{ steps.find_affected_hosts.output.values[0][0] }} has an expiring cert but hasn't reported
+                    metrics in over 5 minutes. Automation aborted. Manual intervention required.
+    else:
+      # Opens a Jira task when a host certificate enters the 7-day to 30-day expiry window
+      - name: create_jira_issue
+        type: jira-service-management.createAlert
+        connector-id: "# Enter connector UUID here"
+        with:
+          message: "Certificate expiring: {{ steps.find_affected_hosts.output.values[0][0] }}"
+          description: |
+            Certificate {{event.alerts[0]['tls.server.x509.subject.common_name'][0]}} on
+            {{steps.find_affected_hosts.output.values[0][0]}} expires in
+            {{ steps.find_affected_hosts.output.values[0][5] }} days.
+
+            Asset Owner: {{event.alerts[0].business_owner}}
+            Criticality: {{ event.alerts[0]['tags'][0] }}
