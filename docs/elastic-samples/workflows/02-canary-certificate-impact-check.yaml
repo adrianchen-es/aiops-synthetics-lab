@@ -1,0 +1,105 @@
+version: "1"
+name: Canary Certificate Impact Check
+description: Workflow to trigger osquery curl_certificate and check potential impact on canary hosts
+enabled: true
+triggers:
+  - type: manual
+inputs:
+  - name: target_host
+    default: google.com
+    type: string
+  - name: target_port
+    default: "443"
+    type: string
+consts:
+  items: [1]
+steps:
+  - name: osquery_check_host
+    type: kibana.request
+    with:
+      method: POST
+      path: /api/osquery/live_queries
+      body:
+        agent_all: true
+        query: SELECT hostname, common_name, organization, organization_unit, serial_number, issuer_common_name, issuer_organization, issuer_organization_unit, substr(valid_from, 17, 4) || '-' || CASE substr(valid_from, 1, 3) WHEN 'Jan' THEN '01' WHEN 'Feb' THEN '02' WHEN 'Mar' THEN '03' WHEN 'Apr' THEN '04' WHEN 'May' THEN '05' WHEN 'Jun' THEN '06' WHEN 'Jul' THEN '07' WHEN 'Aug' THEN '08' WHEN 'Sep' THEN '09' WHEN 'Oct' THEN '10' WHEN 'Nov' THEN '11' WHEN 'Dec' THEN '12' END || '-' || replace(substr(valid_from, 5, 2), ' ', '0') || 'T' || substr(valid_from, 8, 8) || 'Z' AS valid_from, valid_from AS valid_from_original, substr(valid_to, 17, 4) || '-' || CASE substr(valid_to, 1, 3) WHEN 'Jan' THEN '01' WHEN 'Feb' THEN '02' WHEN 'Mar' THEN '03' WHEN 'Apr' THEN '04' WHEN 'May' THEN '05' WHEN 'Jun' THEN '06' WHEN 'Jul' THEN '07' WHEN 'Aug' THEN '08' WHEN 'Sep' THEN '09' WHEN 'Oct' THEN '10' WHEN 'Nov' THEN '11' WHEN 'Dec' THEN '12' END || '-' || replace(substr(valid_to, 5, 2), ' ', '0') || 'T' || substr(valid_to, 8, 8) || 'Z' AS valid_to, valid_to AS valid_to_original, sha256_fingerprint, sha1_fingerprint FROM curl_certificate WHERE hostname = "{{ inputs.target_host }}:{{ inputs.target_port }}";
+        ecs_mapping:
+          tls.server.x509.subject.common_name:
+            field: common_name
+          tls.server.x509.subject.organization:
+            field: organization
+          tls.server.x509.subject.organizational_unit:
+            field: organization_unit
+          tls.server.x509.issuer.common_name:
+            field: issuer_common_name
+          tls.server.x509.issuer.organization:
+            field: issuer_organization
+          tls.server.x509.issuer.organizational_unit:
+            field: issuer_organization_unit
+          tls.server.x509.serial_number:
+            field: serial_number
+          tls.server.x509.not_before:
+            field: valid_from
+          tls.server.x509.not_after:
+            field: valid_to
+          tls.server.hash.sha1:
+            field: sha1_fingerprint
+          tls.server.hash.sha256:
+            field: sha256_fingerprint
+          server.domain:
+            field: hostname
+
+  - name: while_not_workaround_loop
+    type: foreach
+    foreach: "${{consts.items}}"
+    steps:
+      - name: osquery_check_query_completion
+        type: kibana.request
+        with:
+          method: GET
+          path: /api/osquery/live_queries/{{ steps.osquery_check_host.output.data.action_id }}
+      - name: wait_10s
+        type: wait
+        with:
+          duration: 10s
+      - name: retry
+        type: http
+        if: "${{ steps.osquery_check_query_completion.output.data.status != 'completed' }}"
+        with:
+          body: GET
+          url: "https://notreal.gov.au/status/404"
+          #url: "https://httpbin.org/status/404"
+    on-failure:
+      retry:
+        max-attempts: 9
+
+  - name: get_osquery_result
+    type: elasticsearch.esql.query
+    with:
+      query: |
+        FROM logs-osquery_manager.result*
+        | WHERE action_id == "{{ steps.osquery_check_host.output.data.queries[0].action_id }}"
+        | WHERE NOW() > tls.server.x509.not_after
+        | STATS expired_canary_hosts=COUNT_DISTINCT(agent.name) by certificate_validity_duration = DATE_DIFF("day", tls.server.x509.not_before, tls.server.x509.not_after)
+
+  - name: determine_response
+    type: if
+    condition: "${{ steps.get_osquery_result.output.values[0][0] > 0 }}"
+    steps:
+      - name: determine_certificate_type
+        type: if
+        condition: "${{ steps.get_osquery_result.output.values[0][1] > 90 }}"
+        steps:
+          - name: notify_canary_pki_unhealthy
+            type: console
+            with:
+              message: "PKI Certificate impact on canary hosts detected."
+        else:
+          - name: notify_canary_acme_unhealthy
+            type: console
+            with:
+              message: "ACME Certificate impact on canary hosts detected."
+    else:
+      - name: notify_canary_health
+        type: console
+        with:
+          message: "Certificate impact on canary hosts not detected. Reducing priority."

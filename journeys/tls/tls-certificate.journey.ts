@@ -16,6 +16,8 @@
  *   TLS_TARGET_HOST   Hostname to inspect (default: example.com)
  *   TLS_TARGET_PORT   Port to connect on  (default: 443)
  *
+ *   Local 1-day self-signed lab (Nginx/Apache, ports 8443/8444): `local-lab/README.md`
+ *
  * Push this monitor group to Elastic with:
  *   npm run push:tls
  * Or deploy everything:
@@ -40,8 +42,9 @@ journey('TLS Certificate Hash - Generic Host', ({ page, params }) => {
 
   step(`Extract TLS certificate fingerprints from ${host}:${port}`, async () => {
     // Configure telemetry to report hostnames in place of about:blank
+    const requestUrl = port === 443 ? `https://${host}` : `https://${host}:${port}`;
     await page.route('**/*', route => route.fulfill({ status: 200, body: 'TLS check context' }));
-    await page.goto(`https://${host}`, { waitUntil: 'commit' });
+    await page.goto(requestUrl, { waitUntil: 'commit' });
 
     cachedCert = await fetchCertInfo(host, port);
 

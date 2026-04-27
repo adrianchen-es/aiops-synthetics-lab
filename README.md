@@ -1,8 +1,21 @@
-# Ac-Synthetics-Demo-Apr26
+# aiops-synthetics-lab
 
-Elastic Synthetics project that extracts and validates TLS server certificate fingerprints (SHA-256 primary, SHA-1 optional), and combines browser page tests with TLS certificate inspection across several real-world scenarios. Optional cluster-side ingest (**`docs/ingest-pipeline-synthetics-browser.json`**) maps structured **`TLS_CERT` / `TLS_HASH`** stdout from journeys into **`tls.server.*`** so the Kibana **TLS** UI populates for browser monitors ([details](#kibana-tls-ui-and-synthetics-browsercustom-ingest-pipeline)). Journeys live under **`journeys/`** in subfolders (`tls/`, `tls-browser/`, `demos/`, `kibana/`) so you can run or push **all monitors** or **one group** (see [Running locally](#running-locally) and [Pushing monitors to Elastic](#pushing-monitors-to-elastic)). Localized **`tls-target-hosts.csv`** files drive CSV-expanded monitors: **`journeys/tls/`** for `tls.journey.ts` and **`journeys/tls-browser/`** for `tls-browser.journey.ts` (browser step plus optional DOM check; can include additional hosts such as `cloud.elastic.co`).
+**Companion repository** for the Elastic Observability Labs article *Automated Certificate Monitoring and Self-Healing* (April 2026) — a closed-loop, certificate-focused pipeline that uses **Elastic Synthetics** (client-side chain), **ES|QL** alerting, **Osquery** / host inventory (queried from Workflows in the article), and **Elastic Workflows** for remediation and verification. The article walks through the **Sense → Think → Act → Verify** loop; this repo is the **monitors-as-code** and sample **Workflow / alert** source the article references by that name on GitHub.
 
-[![CI](https://github.com/adrianchen-es/Ac-Synthetics-Demo-Apr26/actions/workflows/ci.yml/badge.svg)](https://github.com/adrianchen-es/Ac-Synthetics-Demo-Apr26/actions/workflows/ci.yml)
+> **On GitHub, use the repository `aiops-synthetics-lab`** (for example `https://github.com/adrianchen-es/aiops-synthetics-lab`) so it matches the article’s clone instructions. The article also points to *Automated Reliability: The Architecture of Self-Healing Enterprises* for the broader self-healing “why.”
+
+| Phase | Role | In this repository |
+|------|------|-------------------|
+| **Sense** | Browser checks → `synthetics-*`, optional host inventory | `journeys/` (notably `tls-browser/`), `helpers/tls.ts`, `logCertInfo()`; **`docs/ingest-pipeline-synthetics-browser.json`** maps **`TLS_CERT`** stdout into **`tls.server.*`** for the Kibana TLS UI ([details](#kibana-tls-ui-and-synthetics-browsercustom-ingest-pipeline)) |
+| **Think** | ES|QL on Synthetics, deduplicated by CN + `tags` | `docs/elastic-samples/alerts/*.md` (paste queries into rules) |
+| **Act** | Smart escalation, tickets, optional automation | `docs/elastic-samples/workflows/01-smart-certificate-rotation-escalation-remediation.yaml` |
+| **Verify** | Re-check after rotation, canary impact | `local-lab/` (short-lived certs), `docs/elastic-samples/workflows/02-canary-certificate-impact-check.yaml` |
+
+**Stack note (from the article):** target **Elastic Stack 9.1+** for ES|QL features used in the lab; **Elastic Workflows** is **Technical Preview in 9.3+**. **Elastic Agent** with the **Osquery Manager** integration is assumed for host-side steps described in the article (not shipped inside this Node repo).
+
+This project extracts and validates TLS server certificate fingerprints (SHA-256 primary, SHA-1 optional) and combines browser page tests with TLS certificate inspection. Journeys live under **`journeys/`** in subfolders (`tls/`, `tls-browser/`, `demos/`, `kibana/`) so you can run or push **all monitors** or **one group** (see [Running locally](#running-locally) and [Pushing monitors to Elastic](#pushing-monitors-to-elastic)). Localized **`tls-target-hosts.csv`** files drive CSV-expanded monitors: **`journeys/tls/`** for `tls.journey.ts` and **`journeys/tls-browser/`** for `tls-browser.journey.ts` (browser step plus optional DOM check; can include additional hosts such as `cloud.elastic.co`). The **`criticality`** column becomes tags on each monitor and flows into alert payloads, as in the article.
+
+[![CI](https://github.com/adrianchen-es/aiops-synthetics-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/adrianchen-es/aiops-synthetics-lab/actions/workflows/ci.yml)
 
 ---
 
@@ -145,9 +158,9 @@ npm --version    # should print 9.x.x or higher
 ## Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/adrianchen-es/Ac-Synthetics-Demo-Apr26.git
-cd Ac-Synthetics-Demo-Apr26
+# Clone the repository (name matches the Elastic Observability Labs article)
+git clone https://github.com/adrianchen-es/aiops-synthetics-lab.git
+cd aiops-synthetics-lab
 
 # Install all dependencies (uses package-lock.json for reproducible installs)
 npm ci
@@ -287,6 +300,14 @@ KIBANA_URL="https://..." SYNTHETICS_API_KEY="..." npm run push
 
 ---
 
+## Local lab: 1-day self-signed certs (Nginx / Apache)
+
+The **[`local-lab/`](local-lab/)** directory contains a small Docker-based setup that issues a **one-day** self‑signed key pair, serves it over **HTTPS** with **Nginx** or **Apache** (separate Compose profiles, host ports **8443** and **8444**), and documents how to run **`journeys/tls/tls-certificate.journey.ts`** with `TLS_TARGET_HOST` and `TLS_TARGET_PORT` to simulate **expiry failure**, **renew** (re-issue + container restart and new fingerprint), and **Kibana** notification patterns. See **[`local-lab/README.md`](local-lab/README.md)** for step-by-step use.
+
+The CSV-based TLS monitors (`tls.journey.ts` / `tls-browser.journey.ts`) target port **443** and assert public trust, so the generic **`tls-certificate.journey.ts`** is the one intended for this self-signed lab.
+
+---
+
 ## Project structure
 
 ```
@@ -294,8 +315,16 @@ KIBANA_URL="https://..." SYNTHETICS_API_KEY="..." npm run push
 ├── .github/
 │   └── workflows/
 │       └── ci.yml                          # GitHub Actions CI workflow
+├── local-lab/                              # Optional: 1-day self-signed certs, Nginx/Apache (see local-lab/README.md)
+│   ├── docker-compose.yml
+│   ├── scripts/                          # gen-tls-certs.sh, renew-tls-certs.sh
+│   ├── nginx/ · apache/
+│   └── README.md
 ├── docs/
 │   ├── ingest-pipeline-synthetics-browser.json  # PUT as _ingest/pipeline/synthetics-browser@custom
+│   ├── elastic-samples/         # Workflows (YAML) + alerts (Markdown, ES|QL in fenced blocks; see README)
+│   │   ├── workflows/ · alerts/
+│   │   └── README.md
 │   └── images/
 │       └── tls_ui_with_browser_synthetics.png   # Kibana TLS UI (after pipeline + new data)
 ├── helpers/
@@ -354,7 +383,7 @@ Edit **`synthetics.config.ts`** to change project-wide settings:
 | `project.id` | `ac-synthetics-tls-demo` | Unique monitor project ID in Kibana |
 | `project.url` | env `KIBANA_URL` | Kibana URL |
 | `project.space` | `default` | Kibana space |
-| `monitor.schedule` | `5` (minutes) | How often each monitor runs |
+| `monitor.schedule` | `15` (minutes) | How often each monitor runs |
 | `monitor.locations` | `us_east` | Elastic-managed location(s) |
 | `monitor.privateLocations` | | Private Synthetic location(s) |
 | `playwrightOptions.ignoreHTTPSErrors` | `true` | Required for revoked/self-signed cert journeys |
@@ -414,4 +443,10 @@ Encode **`@`** as **`%40`** in the URL. Adjust host, port, and auth to match you
 After the pipeline is installed, **new** browser synthetic documents that include the **`TLS_CERT`** stdout line should show certificate details in the TLS UI, for example:
 
 ![TLS summary populated from browser synthetics stdout via ingest pipeline](docs/images/tls_ui_with_browser_synthetics.png)
+
+### Sample Elastic Workflows and alert queries
+
+**[`docs/elastic-samples/`](docs/elastic-samples/)** matches the **Think** and **Act** / **Verify** material in *Automated Certificate Monitoring and Self-Healing*: two **Workflow** YAMLs (escalation/remediation and canary `curl_certificate` impact) and two **`alerts/*.md`** files with **ES|QL** in fenced blocks (a **30-day** look-ahead variant; the article’s query uses **90** days—see that README). Copy queries into a Kibana **ES|QL** rule and set schedule, **display name** (for downstream meta-alerts), and actions in the UI. Details: **[`docs/elastic-samples/README.md`](docs/elastic-samples/README.md)**.
+
+---
 
