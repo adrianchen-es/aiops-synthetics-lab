@@ -251,7 +251,7 @@ function expandTemplateMonitorNames(
       replacements = [...hostValues];
     } else {
       push(
-        `Unsupported interpolation in journey name (only \${host} is analysed): ${span.expression.getText(sourceFile)}`,
+        `Unsupported interpolation in journey name (only \${host} is analyzed): ${span.expression.getText(sourceFile)}`,
         span.expression.getText(sourceFile)
       );
       replacements = [''];

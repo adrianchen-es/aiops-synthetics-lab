@@ -66,8 +66,7 @@ steps:
         if: "${{ steps.osquery_check_query_completion.output.data.status != 'completed' }}"
         with:
           body: GET
-          url: "https://notreal.gov.au/status/404"
-          #url: "https://httpbin.org/status/404"
+          url: "https://httpbin.org/status/404"
     on-failure:
       retry:
         max-attempts: 9
