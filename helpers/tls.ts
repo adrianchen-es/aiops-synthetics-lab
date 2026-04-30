@@ -52,9 +52,9 @@ export interface CertInfo {
    * Sourced from `cert.fingerprint` when available.
    */
   sha1?: string;
-  /** Common Name (or Organisation) of the leaf certificate subject */
+  /** Common Name (or Organization) of the leaf certificate subject */
   subject: string;
-  /** Common Name (or Organisation) of the issuing CA */
+  /** Common Name (or Organization) of the issuing CA */
   issuer: string;
   /** Certificate not-valid-before date */
   validFrom: Date;

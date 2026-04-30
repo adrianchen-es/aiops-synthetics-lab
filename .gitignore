@@ -24,7 +24,7 @@ dist/
 build/
 out/
 
-# ── Elastic Synthetics artefacts ─────────────────────────────────────────────
+# ── Elastic Synthetics artifacts ─────────────────────────────────────────────
 .synthetics/
 synthetic-results.json
 

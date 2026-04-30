@@ -64,7 +64,7 @@ The target Kibana URL defaults to `https://ac-siem-hosted-a183da.kb.us-west2.gcp
 
 ### Self-Signed / Internal CA journey (`journeys/demos/self-signed-ca.journey.ts`)
 
-* **Step 1 – TLS:** confirms the connection is **rejected** when no custom CA is loaded (correct security behaviour)
+* **Step 1 – TLS:** confirms the connection is **rejected** when no custom CA is loaded (correct security behavior)
 * **Step 2 – TLS:** extracts the SHA-256 fingerprint with `rejectUnauthorized: false` (always succeeds regardless of CA trust)
 * **Step 3 – TLS:** asserts the certificate is not expired (independent of CA trust)
 

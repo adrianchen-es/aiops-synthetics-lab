@@ -1,7 +1,7 @@
 /**
  * Self-Signed / Internal CA Certificate Journey
  *
- * Demonstrates the expected behaviour when connecting to a server whose
+ * Demonstrates the expected behavior when connecting to a server whose
  * certificate is signed by an internal or self-signed CA that is **not**
  * in the system trust store.
  *
@@ -14,7 +14,7 @@
  *   Expected outcomes
  *   ─────────────────
  *   • Connecting with the default trust store (rejectUnauthorized: true) WILL
- *     fail.  This is correct security behaviour and should not be bypassed in
+ *     fail.  This is correct security behavior and should not be bypassed in
  *     production without explicitly loading the internal CA.
  *   • Fingerprint extraction with rejectUnauthorized: false ALWAYS succeeds.
  *     This lets operators obtain the certificate fingerprint for out-of-band
@@ -27,7 +27,7 @@
  * Journey steps
  * ─────────────
  *   1. Confirm the server REJECTS the connection when no custom CA is loaded
- *      (correct security behaviour).
+ *      (correct security behavior).
  *   2. Extract fingerprints regardless using rejectUnauthorized: false.
  *   3. Verify the certificate is not expired (expiry is independent of trust).
  *
@@ -48,7 +48,7 @@ journey('Self-Signed / Internal CA - TLS Extraction', ({ page }) => {
   // instead of opening a third TLS connection.
   let cachedCert: CertInfo | undefined;
 
-  step('Confirm untrusted connection is rejected (expected security behaviour)', async () => {
+  step('Confirm untrusted connection is rejected (expected security behavior)', async () => {
     // Configure telemetry to report hostnames in place of about:blank
     await page.route('**/*', route => route.fulfill({ status: 200, body: 'TLS check context' }));
     await page.goto(`https://${TARGET_HOST}`, { waitUntil: 'commit' });

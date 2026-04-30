@@ -35,7 +35,7 @@ const config: SyntheticsConfig = {
    *
    * `ignoreHTTPSErrors: true` is intentional for this demo project because
    * several journeys target hosts with deliberately problematic certificates
-   * (revoked, self-signed, expired) to demonstrate TLS inspection behaviour.
+   * (revoked, self-signed, expired) to demonstrate TLS inspection behavior.
    * Do not set this in production monitors that make authenticated requests.
    */
   playwrightOptions: {
