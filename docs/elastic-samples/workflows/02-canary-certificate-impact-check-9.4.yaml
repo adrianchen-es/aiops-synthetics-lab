@@ -81,11 +81,10 @@ steps:
   # ─── 2. Poll until completed — native while loop (9.4+) ──────────────────────
   # In 9.3 this required a foreach + intentional HTTP 404 + on-failure retry hack
   # (see 02-canary-certificate-impact-check.yaml). The while step eliminates that.
-  # The inner data.set re-uses the name init_poll_state so the condition
-  # always evaluates the most recent execution's output.
+  # The inner data.set stores the query status so the while condition can read it.
   - name: poll_osquery_completion
     type: while
-    condition: "${{ steps.init_poll_state.output.query_status != 'completed' }}"
+    condition: "${{ steps.osquery_poll_state.output.query_status != 'completed' }}"
     max-iterations:
       limit: 10
       on-limit: fail
@@ -99,8 +98,8 @@ steps:
         with:
           method: GET
           path: /api/osquery/live_queries/{{ steps.osquery_check_host.output.data.action_id }}
-      # Shadow init_poll_state so the while condition reads the updated value
-      - name: init_poll_state
+      # Store the query status in a data.set step so the while condition can read it
+      - name: osquery_poll_state
         type: data.set
         with:
           query_status: "{{ steps.check_query_completion.output.data.status }}"
