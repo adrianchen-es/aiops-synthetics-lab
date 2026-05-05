@@ -1,0 +1,157 @@
+version: "1"
+name: Canary Certificate Impact Check (9.4)
+description: >
+  Trigger an Osquery curl_certificate live query across all fleet agents and
+  check whether canary hosts confirm TLS expiry for a given hostname and port.
+  Uses native while loop (9.4+) and data.set steps instead of the foreach
+  workaround and console expression evaluators required in 9.3.
+  See 02-canary-certificate-impact-check.yaml for the 9.3-compatible version.
+  Migration guide: https://www.elastic.co/docs/explore-analyze/workflows/authoring-techniques/migrate-from-9-3
+enabled: true
+triggers:
+  - type: manual
+inputs:
+  - name: target_host
+    default: google.com
+    type: string
+  - name: target_port
+    default: "443"
+    type: string
+
+steps:
+  # ─── 1. Dispatch the live query to all enrolled agents ───────────────────────
+  - name: osquery_check_host
+    type: kibana.request
+    with:
+      method: POST
+      path: /api/osquery/live_queries
+      body:
+        agent_all: true
+        query: >
+          SELECT hostname, common_name, organization, organization_unit,
+          serial_number, issuer_common_name, issuer_organization,
+          issuer_organization_unit,
+          substr(valid_from, 17, 4) || '-' ||
+            CASE substr(valid_from, 1, 3)
+              WHEN 'Jan' THEN '01' WHEN 'Feb' THEN '02' WHEN 'Mar' THEN '03'
+              WHEN 'Apr' THEN '04' WHEN 'May' THEN '05' WHEN 'Jun' THEN '06'
+              WHEN 'Jul' THEN '07' WHEN 'Aug' THEN '08' WHEN 'Sep' THEN '09'
+              WHEN 'Oct' THEN '10' WHEN 'Nov' THEN '11' WHEN 'Dec' THEN '12'
+            END || '-' || replace(substr(valid_from, 5, 2), ' ', '0') ||
+            'T' || substr(valid_from, 8, 8) || 'Z' AS valid_from,
+          valid_from AS valid_from_original,
+          substr(valid_to, 17, 4) || '-' ||
+            CASE substr(valid_to, 1, 3)
+              WHEN 'Jan' THEN '01' WHEN 'Feb' THEN '02' WHEN 'Mar' THEN '03'
+              WHEN 'Apr' THEN '04' WHEN 'May' THEN '05' WHEN 'Jun' THEN '06'
+              WHEN 'Jul' THEN '07' WHEN 'Aug' THEN '08' WHEN 'Sep' THEN '09'
+              WHEN 'Oct' THEN '10' WHEN 'Nov' THEN '11' WHEN 'Dec' THEN '12'
+            END || '-' || replace(substr(valid_to, 5, 2), ' ', '0') ||
+            'T' || substr(valid_to, 8, 8) || 'Z' AS valid_to,
+          valid_to AS valid_to_original,
+          sha256_fingerprint, sha1_fingerprint
+          FROM curl_certificate
+          WHERE hostname = "{{ inputs.target_host }}:{{ inputs.target_port }}";
+        ecs_mapping:
+          tls.server.x509.subject.common_name:
+            field: common_name
+          tls.server.x509.subject.organization:
+            field: organization
+          tls.server.x509.subject.organizational_unit:
+            field: organization_unit
+          tls.server.x509.issuer.common_name:
+            field: issuer_common_name
+          tls.server.x509.issuer.organization:
+            field: issuer_organization
+          tls.server.x509.issuer.organizational_unit:
+            field: issuer_organization_unit
+          tls.server.x509.serial_number:
+            field: serial_number
+          tls.server.x509.not_before:
+            field: valid_from
+          tls.server.x509.not_after:
+            field: valid_to
+          tls.server.hash.sha1:
+            field: sha1_fingerprint
+          tls.server.hash.sha256:
+            field: sha256_fingerprint
+          server.domain:
+            field: hostname
+
+  # ─── 2. Poll until completed — native while loop (9.4+) ──────────────────────
+  # In 9.3 this required a foreach + intentional HTTP 404 + on-failure retry hack
+  # (see 02-canary-certificate-impact-check.yaml). The while step eliminates that.
+  # The inner data.set re-uses the name init_poll_state so the condition
+  # always evaluates the most recent execution's output.
+  - name: poll_osquery_completion
+    type: while
+    condition: "${{ steps.init_poll_state.output.query_status != 'completed' }}"
+    max-iterations:
+      limit: 10
+      on-limit: fail
+    steps:
+      - name: wait_10s
+        type: wait
+        with:
+          duration: 10s
+      - name: check_query_completion
+        type: kibana.request
+        with:
+          method: GET
+          path: /api/osquery/live_queries/{{ steps.osquery_check_host.output.data.action_id }}
+      # Shadow init_poll_state so the while condition reads the updated value
+      - name: init_poll_state
+        type: data.set
+        with:
+          query_status: "{{ steps.check_query_completion.output.data.status }}"
+
+  # ─── 3. Aggregate results with ES|QL ─────────────────────────────────────────
+  - name: get_osquery_result
+    type: elasticsearch.esql.query
+    with:
+      query: |
+        FROM logs-osquery_manager.result*
+        | WHERE action_id == "{{ steps.osquery_check_host.output.data.queries[0].action_id }}"
+        | WHERE NOW() > tls.server.x509.not_after
+        | STATS expired_canary_hosts = COUNT_DISTINCT(agent.name)
+            BY certificate_validity_duration = DATE_DIFF("day",
+                tls.server.x509.not_before,
+                tls.server.x509.not_after)
+
+  # ─── 4. Name the positional columns for readability ──────────────────────────
+  # data.set replaces positional values[0][n] access in subsequent conditions.
+  - name: parse_result
+    type: data.set
+    with:
+      expired_hosts: "${{ steps.get_osquery_result.output.values[0][0] }}"
+      cert_duration_days: "${{ steps.get_osquery_result.output.values[0][1] }}"
+
+  # ─── 5. Route response by impact and certificate class ───────────────────────
+  - name: determine_response
+    type: if
+    condition: "${{ steps.parse_result.output.expired_hosts > 0 }}"
+    steps:
+      - name: determine_certificate_type
+        type: if
+        condition: "${{ steps.parse_result.output.cert_duration_days > 90 }}"
+        steps:
+          # PKI (long-lived) impact — replace with your Slack / PagerDuty connector
+          - name: set_pki_outcome
+            type: data.set
+            with:
+              impact_type: "pki"
+              message: "PKI certificate impact on canary hosts detected."
+        else:
+          # ACME (short-lived) impact — replace with your Slack / PagerDuty connector
+          - name: set_acme_outcome
+            type: data.set
+            with:
+              impact_type: "acme"
+              message: "ACME certificate impact on canary hosts detected."
+    else:
+      # No impact — reduce priority, redirect triage to DNS / routing / upstream
+      - name: set_clean_outcome
+        type: data.set
+        with:
+          impact_type: "none"
+          message: "Certificate impact on canary hosts not detected. Reducing priority."
