@@ -15,12 +15,21 @@ const config: SyntheticsConfig = {
 
   monitor: {
     /**
-     * Schedule: run every 5 minutes across all available global locations.
-     * For a certificate-hash check the payload is tiny, so 5-minute cadence
+     * Schedule: run every 120 minutes across all available global locations.
+     * For a certificate-hash check the payload is tiny, so 120-minute cadence
      * gives near-real-time visibility without excess load.
      */
-    schedule: 15,
+    schedule: 120,
     locations: ['us_east'],
+    /**
+     * Example of a private location
+     * This is a placeholder for a private location that is not yet available.
+     * In a real deployment, you would replace this with the name of the private location.
+     * You can find the name of the private location in the Kibana UI.
+     * Kibana -> Synthetics -> Settings -> Private Locations
+     * You can also find the name of the private location in the Kibana API.
+     * Disable private locations by setting the privateLocations array to an empty array [].
+    */
     privateLocations: ['my-sample-location'],
 
     /**
